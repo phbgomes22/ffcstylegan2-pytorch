@@ -157,7 +157,7 @@ def train_from_folder(
         mixed_prob = mixed_prob,
         log = log
     )
-
+    print("Preparing training...")
     if generate:
         model = Trainer(**model_args)
         model.load(load_from)

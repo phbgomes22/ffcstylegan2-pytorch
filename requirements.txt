@@ -1,4 +1,4 @@
-aim,
+aim
 einops
 contrastive_learner>=0.1.0
 fire
