@@ -30,6 +30,7 @@ import torchvision
 from torchvision import transforms
 from stylegan2_pytorch.version import __version__
 from stylegan2_pytorch.diff_augment import DiffAugment
+from .tar_loader import TarDataset
 
 from vector_quantize_pytorch import VectorQuantize
 
@@ -937,7 +938,7 @@ class Trainer():
         return {'image_size': self.image_size, 'network_capacity': self.network_capacity, 'lr_mlp': self.lr_mlp, 'transparent': self.transparent, 'fq_layers': self.fq_layers, 'fq_dict_size': self.fq_dict_size, 'attn_layers': self.attn_layers, 'no_const': self.no_const}
 
     def set_data_src(self, folder):
-        self.dataset = Dataset(folder, self.image_size, transparent = self.transparent, aug_prob = self.dataset_aug_prob)
+        self.dataset = TarDataset(folder, self.image_size, transparent = self.transparent, aug_prob = self.dataset_aug_prob)
         num_workers = num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
         sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
         dataloader = data.DataLoader(self.dataset, num_workers = num_workers, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
