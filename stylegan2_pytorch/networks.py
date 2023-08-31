@@ -929,7 +929,7 @@ class Trainer():
                                                                   transparent = self.transparent, 
                                                                   aug_prob = self.dataset_aug_prob))
         
-        num_workers = num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
+        num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
         sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
         dataloader = data.DataLoader(self.dataset, num_workers = num_workers, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
         self.loader = cycle(dataloader)
