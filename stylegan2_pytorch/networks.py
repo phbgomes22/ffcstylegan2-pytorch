@@ -357,33 +357,20 @@ def resize_to_minimum_size(min_size, image):
         return torchvision.transforms.functional.resize(image, min_size)
     return image
 
-class Dataset(data.Dataset):
-    def __init__(self, folder, image_size, transparent = False, aug_prob = 0.):
-        super().__init__()
-        self.folder = folder
-        self.image_size = image_size
-        self.paths = [p for ext in EXTS for p in Path(f'{folder}').glob(f'**/*.{ext}')]
-        assert len(self.paths) > 0, f'No images were found in {folder} for training'
 
-        convert_image_fn = convert_transparent_to_rgb if not transparent else convert_rgb_to_transparent
-        num_channels = 3 if not transparent else 4
+def get_transforms(self, image_size, transparent = False, aug_prob = 0.): 
+    convert_image_fn = convert_transparent_to_rgb if not transparent else convert_rgb_to_transparent
 
-        self.transform = transforms.Compose([
-            transforms.Lambda(convert_image_fn),
-            transforms.Lambda(partial(resize_to_minimum_size, image_size)),
-            transforms.Resize(image_size),
-            RandomApply(aug_prob, transforms.RandomResizedCrop(image_size, scale=(0.5, 1.0), ratio=(0.98, 1.02)), transforms.CenterCrop(image_size)),
-            transforms.ToTensor(),
-            transforms.Lambda(expand_greyscale(transparent))
-        ])
+    self.transform = transforms.Compose([
+        transforms.Lambda(convert_image_fn),
+        transforms.Lambda(partial(resize_to_minimum_size, image_size)),
+        transforms.Resize(image_size),
+        RandomApply(aug_prob, transforms.RandomResizedCrop(image_size, scale=(0.5, 1.0), ratio=(0.98, 1.02)), transforms.CenterCrop(image_size)),
+        transforms.ToTensor(),
+        transforms.Lambda(expand_greyscale(transparent))
+    ])
 
-    def __len__(self):
-        return len(self.paths)
 
-    def __getitem__(self, index):
-        path = self.paths[index]
-        img = Image.open(path)
-        return self.transform(img)
 
 # augmentations
 
@@ -938,7 +925,10 @@ class Trainer():
         return {'image_size': self.image_size, 'network_capacity': self.network_capacity, 'lr_mlp': self.lr_mlp, 'transparent': self.transparent, 'fq_layers': self.fq_layers, 'fq_dict_size': self.fq_dict_size, 'attn_layers': self.attn_layers, 'no_const': self.no_const}
 
     def set_data_src(self, folder):
-        self.dataset = TarDataset(folder, self.image_size, transparent = self.transparent, aug_prob = self.dataset_aug_prob)
+        self.dataset = TarDataset(folder, transform=self.get_transform(self.image_size, 
+                                                                       transparent = self.transparent, 
+                                                                       aug_prob = self.dataset_aug_prob))
+        
         num_workers = num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
         sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
         dataloader = data.DataLoader(self.dataset, num_workers = num_workers, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
