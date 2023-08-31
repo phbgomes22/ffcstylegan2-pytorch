@@ -358,10 +358,10 @@ def resize_to_minimum_size(min_size, image):
     return image
 
 
-def get_transforms(self, image_size, transparent = False, aug_prob = 0.): 
+def get_transforms(image_size, transparent = False, aug_prob = 0.): 
     convert_image_fn = convert_transparent_to_rgb if not transparent else convert_rgb_to_transparent
 
-    self.transform = transforms.Compose([
+    return transforms.Compose([
         transforms.Lambda(convert_image_fn),
         transforms.Lambda(partial(resize_to_minimum_size, image_size)),
         transforms.Resize(image_size),
@@ -925,9 +925,9 @@ class Trainer():
         return {'image_size': self.image_size, 'network_capacity': self.network_capacity, 'lr_mlp': self.lr_mlp, 'transparent': self.transparent, 'fq_layers': self.fq_layers, 'fq_dict_size': self.fq_dict_size, 'attn_layers': self.attn_layers, 'no_const': self.no_const}
 
     def set_data_src(self, folder):
-        self.dataset = TarDataset(folder, transform=self.get_transform(self.image_size, 
-                                                                       transparent = self.transparent, 
-                                                                       aug_prob = self.dataset_aug_prob))
+        self.dataset = TarDataset(folder, transform=get_transforms(self.image_size, 
+                                                                  transparent = self.transparent, 
+                                                                  aug_prob = self.dataset_aug_prob))
         
         num_workers = num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
         sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
