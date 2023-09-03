@@ -586,7 +586,7 @@ class GeneratorBlock(nn.Module):
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
         self.to_noise1 = nn.Linear(1, filters)
-        FFCMOD()
+       
         self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=0.0, ratio_gout=0.5)
         
         self.to_style2 = nn.Linear(latent_dim, filters)
