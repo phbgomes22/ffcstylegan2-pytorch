@@ -614,11 +614,9 @@ class GeneratorBlock(nn.Module):
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
-        x_l, x_g = self.conv2(x, style2)
-        noise2_l, noise2_g = torch.split(noise2, noise2.size(1)// 2, dim=1)
-        x_l = self.activation(x_l + noise2_l)
-        x_g = self.activation(x_g + noise2_g)
-        x = self.resizer(x)
+        x_l, _ = self.conv2(x, style2)
+        x_l = self.activation(x_l + noise2)
+      #  x = self.resizer(x)
 
         rgb = self.to_rgb(x, prev_rgb, istyle)
         return x, rgb
