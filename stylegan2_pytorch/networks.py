@@ -517,9 +517,6 @@ class FFCMOD(nn.Module):
         out_cg = int(out_channels * ratio_gout)
         out_cl = out_channels - out_cg
 
-        print("in_cl, in_cg, out_cl, out_cg")
-        print(in_cl, in_cg, out_cl, out_cg )
-
         self.ratio_gin = ratio_gin
         self.ratio_gout = ratio_gout
 
@@ -567,7 +564,10 @@ class FFCMOD(nn.Module):
 
         if self.ratio_gout != 1:
             # creates the output local signal passing the right signals to the right convolutions
-            out_xl = self.convl2l(x_l, y) + self.convg2l(x_g, y)
+            out_xl = self.convl2l(x_l, y) 
+            if type(self.convg2l) is not nn.Identity:
+                out_xl =+ self.convg2l(x_g, y)
+                
         if self.ratio_gout != 0:
             # creates the output global signal passing the right signals to the right convolutions
             out_xg = self.convl2g(x_l, y) 
