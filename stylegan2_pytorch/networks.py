@@ -618,16 +618,16 @@ class GeneratorBlock(nn.Module):
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
-        print("\n")
-        print("\n====== GEN BLOCK ========")
-        print(x_l.shape)
-        print("1" if type(x_g) == int else x_g.shape)
-        print("\n------ CONV 1 -------")
+        # print("\n")
+        # print("\n====== GEN BLOCK ========")
+        # print(x_l.shape)
+        # print("1" if type(x_g) == int else x_g.shape)
+        # print("\n------ CONV 1 -------")
         x = x_l, x_g
         style1 = self.to_style1(istyle)
         x_l, x_g = self.conv1(x, style1)
-        print(x_l.shape)
-        print(x_g.shape)
+        # print(x_l.shape)
+        # print(x_g.shape)
         noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)
         
         x_l = self.activation(x_l + noise1_l)
@@ -635,10 +635,10 @@ class GeneratorBlock(nn.Module):
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
-        print("------ CONV 2 -------")
-        print(style2.shape)
-        print(x_l.shape)
-        print("1" if type(x_g) == int else x_g.shape)
+        # print("------ CONV 2 -------")
+        # print(style2.shape)
+        # print(x_l.shape)
+        # print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
         noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1)
         x_l = self.activation(x_l + noise2_l)
