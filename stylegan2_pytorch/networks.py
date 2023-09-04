@@ -557,20 +557,22 @@ class FFCMOD(nn.Module):
 
     # receives the signal as a tuple containing the local signal in the first position
     # and the global signal in the second position
-    def forward(self, x, y = None):
+    def forward(self, x, style = None):
         # splits the received signal into the local and global signals
         x_l, x_g = x if type(x) is tuple else (x, 0)
         out_xl, out_xg = 0, 0
 
+        style_l, style_g = torch.split(style, x_l.size(1), dim=1)
+
         if self.ratio_gout != 1:
             # creates the output local signal passing the right signals to the right convolutions
-            out_xl = self.convl2l(x_l, y) 
+            out_xl = self.convl2l(x_l, style_l) 
             if type(self.convg2l) is not nn.Identity:
-                out_xl =+ self.convg2l(x_g, y)
+                out_xl =+ self.convg2l(x_g, style_g)
                 
         if self.ratio_gout != 0:
             # creates the output global signal passing the right signals to the right convolutions
-            out_xg = self.convl2g(x_l, y) 
+            out_xg = self.convl2g(x_l, style_l) 
             if type(self.convg2g) is not nn.Identity:
                 out_xg = out_xg + self.convg2g(x_g)
 
@@ -590,7 +592,7 @@ class GeneratorBlock(nn.Module):
         self.g_in = g_in
         self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.5)
         
-        self.to_style2 = nn.Linear(latent_dim, filters // 2)
+        self.to_style2 = nn.Linear(latent_dim, filters)
         self.to_noise2 = nn.Linear(1, filters)
         self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.5, ratio_gout=g_out)
 
@@ -622,7 +624,7 @@ class GeneratorBlock(nn.Module):
         x_l, x_g = self.conv1(x, style1)
         print(x_l.shape)
         print(x_g.shape)
-        noise1_l, noise1_g = torch.split(noise1, noise1.size(1)// 2, dim=1)
+        noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)
         
         x_l = self.activation(x_l + noise1_l)
         x_g = self.activation(x_g + noise1_g)
@@ -634,7 +636,7 @@ class GeneratorBlock(nn.Module):
         print(x_l.shape)
         print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
-        noise2_l, noise2_g = torch.split(noise2, noise2.size(1)// 2, dim=1)
+        noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1)
         x_l = self.activation(x_l + noise2_l)
         x_g = self.activation(x_g + noise2_g)
 
