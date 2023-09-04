@@ -607,7 +607,8 @@ class GeneratorBlock(nn.Module):
             x_l = self.upsample(x_l)
             if type(x_g) is not int:
                 x_g = self.upsample(x_g)
-
+        x = x_l, x_g
+        x = self.resizer(x)
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
