@@ -587,12 +587,12 @@ class GeneratorBlock(nn.Module):
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
         self.to_noise1 = nn.Linear(1, filters)
-       
-        self.conv1 = FFCMOD(input_channels, filters*2, 3, ratio_gin=g_in, ratio_gout=0.5)
+        self.g_in = g_in
+        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.5)
         
-        self.to_style2 = nn.Linear(latent_dim, filters)
+        self.to_style2 = nn.Linear(latent_dim, filters // 2)
         self.to_noise2 = nn.Linear(1, filters)
-        self.conv2 =  FFCMOD(filters*2, filters, 3, ratio_gin=0.5, ratio_gout=g_out)
+        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.5, ratio_gout=g_out)
 
         self.activation = leaky_relu()
         self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
@@ -611,16 +611,26 @@ class GeneratorBlock(nn.Module):
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
-
+        print("====== GEN BLOCK ========")
+        print(x_l.shape)
+        print(x_g.shape)
+        print("------ CONV 1 -------")
         x = x_l, x_g
         style1 = self.to_style1(istyle)
         x_l, x_g = self.conv1(x, style1)
+        print(x_l.shape)
+        print(x_g.shape)
         noise1_l, noise1_g = torch.split(noise1, noise1.size(1)// 2, dim=1)
+        
         x_l = self.activation(x_l + noise1_l)
         x_g = self.activation(x_g + noise1_g)
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
+        print("------ CONV 2 -------")
+        print(style2.shape)
+        print(x_l.shape)
+        print(x_g.shape)
         x_l, x_g = self.conv2(x, style2)
         noise2_l, noise2_g = torch.split(noise2, noise2.size(1)// 2, dim=1)
         x_l = self.activation(x_l + noise2_l)
