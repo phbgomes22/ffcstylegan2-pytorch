@@ -562,7 +562,7 @@ class FFCMOD(nn.Module):
         x_l, x_g = x if type(x) is tuple else (x, 0)
         out_xl, out_xg = 0, 0
 
-        if x_g == 0:
+        if type(x_g) == int:
             style_l = style
             style_g = 0
         else:
