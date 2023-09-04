@@ -580,18 +580,19 @@ class FFCMOD(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False):
+    def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False,
+                 g_in = 0.0, g_out = 0.0):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
         self.to_noise1 = nn.Linear(1, filters)
        
-        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=0.0, ratio_gout=0.5)
+        self.conv1 = FFCMOD(input_channels, filters*2, 3, ratio_gin=g_in, ratio_gout=0.5)
         
-        self.to_style2 = nn.Linear(latent_dim, int(filters*0.5))
+        self.to_style2 = nn.Linear(latent_dim, filters)
         self.to_noise2 = nn.Linear(1, filters)
-        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.5, ratio_gout=0.0)
+        self.conv2 =  FFCMOD(filters*2, filters, 3, ratio_gin=0.5, ratio_gout=g_out)
 
         self.activation = leaky_relu()
         self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
@@ -599,13 +600,19 @@ class GeneratorBlock(nn.Module):
         self.resizer = Resizer()
 
     def forward(self, x, prev_rgb, istyle, inoise):
+
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+
         if exists(self.upsample):
-            x = self.upsample(x)
+            x_l = self.upsample(x_l)
+            if type(x_g) is not int:
+                x_g = self.upsample(x_g)
 
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
 
+        x = x_l, x_g
         style1 = self.to_style1(istyle)
         x_l, x_g = self.conv1(x, style1)
         noise1_l, noise1_g = torch.split(noise1, noise1.size(1)// 2, dim=1)
@@ -614,11 +621,14 @@ class GeneratorBlock(nn.Module):
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
-        x, _ = self.conv2(x, style2)
-        x = self.activation(x + noise2)
-      #  x = self.resizer(x)
+        x_l, x_g = self.conv2(x, style2)
+        noise2_l, noise2_g = torch.split(noise2, noise2.size(1)// 2, dim=1)
+        x_l = self.activation(x_l + noise2_l)
+        x_g = self.activation(x_g + noise2_g)
 
-        rgb = self.to_rgb(x, prev_rgb, istyle)
+        x = x_l, x_g
+        x_rgb = self.resizer(x)
+        rgb = self.to_rgb(x_rgb, prev_rgb, istyle)
         return x, rgb
 
 class DiscriminatorBlock(nn.Module):
@@ -687,7 +697,9 @@ class Generator(nn.Module):
                 out_chan,
                 upsample = not_first,
                 upsample_rgb = not_last,
-                rgba = transparent
+                rgba = transparent,
+                g_in = 0.5 if not_first else 0.0
+                g_out = 0.5
             )
             self.blocks.append(block)
 
