@@ -698,7 +698,7 @@ class Generator(nn.Module):
                 upsample = not_first,
                 upsample_rgb = not_last,
                 rgba = transparent,
-                g_in = 0.5 if not_first else 0.0
+                g_in = 0.5 if not_first else 0.0,
                 g_out = 0.5
             )
             self.blocks.append(block)
