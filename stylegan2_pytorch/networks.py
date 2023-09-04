@@ -562,7 +562,11 @@ class FFCMOD(nn.Module):
         x_l, x_g = x if type(x) is tuple else (x, 0)
         out_xl, out_xg = 0, 0
 
-        style_l, style_g = torch.split(style, x_l.size(1), dim=1)
+        if x_g == 0:
+            style_l = style
+            style_g = 0
+        else:
+            style_l, style_g = torch.split(style, x_l.size(1), dim=1)
 
         if self.ratio_gout != 1:
             # creates the output local signal passing the right signals to the right convolutions
