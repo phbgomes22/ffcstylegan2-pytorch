@@ -594,11 +594,11 @@ class GeneratorBlock(nn.Module):
         self.to_style1 = nn.Linear(latent_dim, input_channels)
         self.to_noise1 = nn.Linear(1, filters)
         self.g_in = g_in
-        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.5)
+        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.25)
         
         self.to_style2 = nn.Linear(latent_dim, filters)
         self.to_noise2 = nn.Linear(1, filters)
-        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.5, ratio_gout=g_out)
+        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.25, ratio_gout=g_out)
 
         self.activation = leaky_relu()
         self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
@@ -716,8 +716,8 @@ class Generator(nn.Module):
                 upsample = not_first,
                 upsample_rgb = not_last,
                 rgba = transparent,
-                g_in = 0.5 if not_first else 0.0,
-                g_out = 0.5
+                g_in = 0.25 if not_first else 0.0,
+                g_out = 0.25
             )
             self.blocks.append(block)
 
