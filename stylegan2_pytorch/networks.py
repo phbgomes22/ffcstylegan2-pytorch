@@ -625,7 +625,7 @@ class GeneratorBlock(nn.Module):
         inoise_l = inoise[:, :x_l.shape[2], :x_l.shape[3], :]
         noise1_l = self.to_noise1_l(inoise_l).permute((0, 3, 2, 1))
         noise2_l = self.to_noise2_l(inoise_l).permute((0, 3, 2, 1))
-        inoise_g = torch.tensor()
+        inoise_g = torch.tensor([])
         if type(x_g) is not int:
             inoise_g = inoise[:, :x_g.shape[2], :x_g.shape[3], :]
             noise1_g = self.to_noise1_g(inoise_g).permute((0, 3, 2, 1))
