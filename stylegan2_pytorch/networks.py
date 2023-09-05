@@ -533,7 +533,7 @@ class FFCMOD(nn.Module):
         module = nn.Identity if condition else Conv2DMod
         # this is the convolution that processes the local signal and contributes 
         # for the formation of the outputted global signal
-        self.convl2g = module(in_cl, out_cl, kernel_size, demod, stride, dilation, eps)
+        self.convl2g = module(in_cl, out_cg, kernel_size, demod, stride, dilation, eps)
         # if not condition:
         #     self.convl2g = torch.nn.utils.spectral_norm(self.convl2g)
 
@@ -541,7 +541,7 @@ class FFCMOD(nn.Module):
         module = nn.Identity if condition else Conv2DMod
         # this is the convolution that processes the global signal and contributes 
         # for the formation of the outputted local signal
-        self.convg2l = module(in_cl, out_cl, kernel_size, demod, stride, dilation, eps)
+        self.convg2l = module(in_cg, out_cl, kernel_size, demod, stride, dilation, eps)
         # if not condition:
         #     self.convg2l = torch.nn.utils.spectral_norm(self.convg2l)
 
