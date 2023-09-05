@@ -591,14 +591,12 @@ class GeneratorBlock(nn.Module):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
-        in_ch_l = int(filters*(1 - g_in))
-        in_ch_g = int(filters*g_in)
         out_ch_l = int(filters*(1 - g_out))
         out_ch_g = int(filters*g_out)
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1_l = nn.Linear(1, in_ch_l)
-        self.to_noise1_g = nn.Linear(1, in_ch_g)
+        self.to_noise1_l = nn.Linear(1, int(filters*(1 - 0.25))) # output from conv1
+        self.to_noise1_g = nn.Linear(1, int(filters*0.25)) # output from conv1
         self.g_in = g_in
         self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.25)
         
