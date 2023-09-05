@@ -619,15 +619,6 @@ class GeneratorBlock(nn.Module):
             x_l = self.upsample(x_l)
             if type(x_g) is not int:
                 x_g = self.upsample(x_g)
-        
-        inoise_l = inoise[:, :x_l.shape[2], :x_l.shape[3], :]
-        noise1_l = self.to_noise1_l(inoise_l).permute((0, 3, 2, 1))
-        noise2_l = self.to_noise2_l(inoise_l).permute((0, 3, 2, 1))
-        inoise_g = torch.tensor([])
-        if type(x_g) is not int:
-            inoise_g = inoise[:, :x_g.shape[2], :x_g.shape[3], :]
-            noise1_g = self.to_noise1_g(inoise_g).permute((0, 3, 2, 1))
-            noise2_g = self.to_noise2_g(inoise_g).permute((0, 3, 2, 1))
         # print("\n")
         # print("\n====== GEN BLOCK ========")
         # print(x_l.shape)
@@ -638,6 +629,16 @@ class GeneratorBlock(nn.Module):
         x_l, x_g = self.conv1(x, style1)
         # print(x_l.shape)
         # print(x_g.shape)
+        
+        inoise_l = inoise[:, :x_l.shape[2], :x_l.shape[3], :]
+        noise1_l = self.to_noise1_l(inoise_l).permute((0, 3, 2, 1))
+        noise2_l = self.to_noise2_l(inoise_l).permute((0, 3, 2, 1))
+        noise1_g = torch.tensor([])
+        noise2_g = torch.tensor([])
+        if type(x_g) is not int:
+            inoise_g = inoise[:, :x_g.shape[2], :x_g.shape[3], :]
+            noise1_g = self.to_noise1_g(inoise_g).permute((0, 3, 2, 1))
+            noise2_g = self.to_noise2_g(inoise_g).permute((0, 3, 2, 1))
        
         x_l = self.activation(x_l + noise1_l)
         x_g = self.activation(x_g + noise1_g)
