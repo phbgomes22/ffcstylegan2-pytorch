@@ -864,10 +864,14 @@ class StyleGAN2(nn.Module):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
 
         for block in self.G.blocks:
-            nn.init.zeros_(block.to_noise1.weight)
-            nn.init.zeros_(block.to_noise2.weight)
-            nn.init.zeros_(block.to_noise1.bias)
-            nn.init.zeros_(block.to_noise2.bias)
+            nn.init.zeros_(block.to_noise1_l.weight)
+            nn.init.zeros_(block.to_noise1_g.weight)
+            nn.init.zeros_(block.to_noise2_l.weight)
+            nn.init.zeros_(block.to_noise2_g.weight)
+            nn.init.zeros_(block.to_noise1_l.bias)
+            nn.init.zeros_(block.to_noise1_g.bias)
+            nn.init.zeros_(block.to_noise2_l.bias)
+            nn.init.zeros_(block.to_noise2_g.bias)
 
     def EMA(self):
         def update_moving_average(ma_model, current_model):
