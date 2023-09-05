@@ -591,13 +591,21 @@ class GeneratorBlock(nn.Module):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
+        in_ch_l = int(filters*(1 - g_in))
+        in_ch_g = int(filters*g_in)
+        out_ch_l = int(filters*(1 - g_out))
+        out_ch_g = int(filters*g_out)
+
         self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1 = nn.Linear(1, filters)
+        self.to_noise1_l = nn.Linear(1, in_ch_l)
+        self.to_noise1_g = nn.Linear(1, in_ch_g)
         self.g_in = g_in
         self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.25)
         
         self.to_style2 = nn.Linear(latent_dim, filters)
-        self.to_noise2 = nn.Linear(1, filters)
+        self.to_noise2_l = nn.Linear(1, out_ch_l)
+        self.to_noise2_g = nn.Linear(1, out_ch_g)
+
         self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.25, ratio_gout=g_out)
 
         self.activation = leaky_relu()
@@ -613,11 +621,14 @@ class GeneratorBlock(nn.Module):
             x_l = self.upsample(x_l)
             if type(x_g) is not int:
                 x_g = self.upsample(x_g)
-        x = x_l, x_g
-        x = self.resizer(x)
-        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
-        noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
-        noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
+        
+        inoise_l = inoise[:, :x_l.shape[2], :x_l.shape[3], :]
+        inoise_g = inoise[:, :x_g.shape[2], :x_g.shape[3], :]
+
+        noise1_l = self.to_noise1_l(inoise_l).permute((0, 3, 2, 1))
+        noise1_g = self.to_noise1_g(inoise_g).permute((0, 3, 2, 1))
+        noise2_l = self.to_noise2_l(inoise_l).permute((0, 3, 2, 1))
+        noise2_g = self.to_noise2_g(inoise_g).permute((0, 3, 2, 1))
         # print("\n")
         # print("\n====== GEN BLOCK ========")
         # print(x_l.shape)
@@ -628,7 +639,6 @@ class GeneratorBlock(nn.Module):
         x_l, x_g = self.conv1(x, style1)
         # print(x_l.shape)
         # print(x_g.shape)
-        noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)
        
         x_l = self.activation(x_l + noise1_l)
         x_g = self.activation(x_g + noise1_g)
@@ -640,7 +650,6 @@ class GeneratorBlock(nn.Module):
         # print(x_l.shape)
         # print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
-        noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1)
         x_l = self.activation(x_l + noise2_l)
         x_g = self.activation(x_g + noise2_g)
 
