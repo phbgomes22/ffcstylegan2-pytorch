@@ -591,20 +591,17 @@ class GeneratorBlock(nn.Module):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
-        out_ch_l = int(filters*(1 - g_out))
-        out_ch_g = int(filters*g_out)
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1_l = nn.Linear(1, int(filters*(1 - 0.25))) # output from conv1
-        self.to_noise1_g = nn.Linear(1, int(filters*0.25)) # output from conv1
+        self.to_noise1 = nn.Linear(1, filters) # output from conv1
+        self.to_noise2 = nn.Linear(1, filters) # output from conv2
         self.g_in = g_in
-        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=0.25)
+        self.conv1 = FFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=g_in)
         
         self.to_style2 = nn.Linear(latent_dim, filters)
-        self.to_noise2_l = nn.Linear(1, out_ch_l)
-        self.to_noise2_g = nn.Linear(1, out_ch_g)
 
-        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=0.25, ratio_gout=g_out)
+
+        self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=g_in, ratio_gout=g_out)
 
         self.activation = leaky_relu()
         self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
@@ -629,17 +626,11 @@ class GeneratorBlock(nn.Module):
         x_l, x_g = self.conv1(x, style1)
         # print(x_l.shape)
         # print(x_g.shape)
-        
-        inoise_l = inoise[:, :x_l.shape[2], :x_l.shape[3], :]
-        noise1_l = self.to_noise1_l(inoise_l).permute((0, 3, 2, 1))
-        noise2_l = self.to_noise2_l(inoise_l).permute((0, 3, 2, 1))
-        noise1_g = torch.tensor([])
-        noise2_g = torch.tensor([])
-        if type(x_g) is not int:
-            inoise_g = inoise[:, :x_g.shape[2], :x_g.shape[3], :]
-            noise1_g = self.to_noise1_g(inoise_g).permute((0, 3, 2, 1))
-            noise2_g = self.to_noise2_g(inoise_g).permute((0, 3, 2, 1))
-       
+
+        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
+        noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
+        noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)  
         x_l = self.activation(x_l + noise1_l)
         x_g = self.activation(x_g + noise1_g)
 
@@ -650,6 +641,8 @@ class GeneratorBlock(nn.Module):
         # print(x_l.shape)
         # print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
+        
+        noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1) 
         x_l = self.activation(x_l + noise2_l)
         x_g = self.activation(x_g + noise2_g)
 
@@ -864,14 +857,10 @@ class StyleGAN2(nn.Module):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
 
         for block in self.G.blocks:
-            nn.init.zeros_(block.to_noise1_l.weight)
-            nn.init.zeros_(block.to_noise1_g.weight)
-            nn.init.zeros_(block.to_noise2_l.weight)
-            nn.init.zeros_(block.to_noise2_g.weight)
-            nn.init.zeros_(block.to_noise1_l.bias)
-            nn.init.zeros_(block.to_noise1_g.bias)
-            nn.init.zeros_(block.to_noise2_l.bias)
-            nn.init.zeros_(block.to_noise2_g.bias)
+            nn.init.zeros_(block.to_noise1.weight)
+            nn.init.zeros_(block.to_noise2.weight)
+            nn.init.zeros_(block.to_noise1.bias)
+            nn.init.zeros_(block.to_noise2.bias)
 
     def EMA(self):
         def update_moving_average(ma_model, current_model):
