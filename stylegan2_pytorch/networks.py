@@ -624,14 +624,15 @@ class GeneratorBlock(nn.Module):
         style1 = self.to_style1(istyle)
         x_l, x_g = self.conv1(x, style1)
         print(x_l.shape)
-        print(x_g.shape)
+        print("1" if type(x_g) == int else x_g.shape)
 
         inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
         noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)  
         x_l = self.activation(x_l + noise1_l)
-        x_g = self.activation(x_g + noise1_g)
+        if type(x_g) is not int:
+            x_g = self.activation(x_g + noise1_g)
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
@@ -643,7 +644,8 @@ class GeneratorBlock(nn.Module):
         
         noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1) 
         x_l = self.activation(x_l + noise2_l)
-        x_g = self.activation(x_g + noise2_g)
+        if type(x_g) is not int:
+            x_g = self.activation(x_g + noise2_g)
 
         x = x_l, x_g
         x_rgb = self.resizer(x)
@@ -721,8 +723,8 @@ class Generator(nn.Module):
                 upsample = not_first,
                 upsample_rgb = not_last,
                 rgba = transparent,
-                g_in = 0.0,#0.25 if ind > n_last_layers else 0.0,
-                g_out = 0.0 # 0.25 if ind > n_last_layers - 1 else 0.0
+                g_in = 0.25 if ind > n_last_layers else 0.0,
+                g_out = 0.25 if ind > n_last_layers - 1 else 0.0
             )
             self.blocks.append(block)
 
