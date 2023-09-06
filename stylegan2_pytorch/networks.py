@@ -600,7 +600,6 @@ class GeneratorBlock(nn.Module):
         
         self.to_style2 = nn.Linear(latent_dim, filters)
 
-
         self.conv2 =  FFCMOD(filters, filters, 3, ratio_gin=g_in, ratio_gout=g_out)
 
         self.activation = leaky_relu()
@@ -702,6 +701,7 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([])
         self.attns = nn.ModuleList([])
 
+        n_last_layers = len(in_out_pairs) - 2
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
             not_first = ind != 0
             not_last = ind != (self.num_layers - 1)
@@ -718,8 +718,8 @@ class Generator(nn.Module):
                 upsample = not_first,
                 upsample_rgb = not_last,
                 rgba = transparent,
-                g_in = 0.25 if not_first else 0.0,
-                g_out = 0.25
+                g_in = 0.25 if ind > n_last_layers else 0.0,
+                g_out = 0.25 if ind > n_last_layers - 1 else 0.0
             )
             self.blocks.append(block)
 
