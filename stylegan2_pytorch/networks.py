@@ -727,7 +727,6 @@ class Generator(nn.Module):
     def forward(self, styles, input_noise):
         batch_size = styles.shape[0]
         image_size = self.image_size
-        print("Forward Generator")
         if self.no_const:
             avg_style = styles.mean(dim=1)[:, :, None, None]
             x = self.to_initial_block(avg_style)
@@ -741,6 +740,7 @@ class Generator(nn.Module):
         for style, block, attn in zip(styles, self.blocks, self.attns):
             if exists(attn):
                 x = attn(x)
+            print("Forward Generator Block")
             x, rgb = block(x, rgb, style, input_noise)
 
         return rgb
