@@ -631,7 +631,12 @@ class GeneratorBlock(nn.Module):
         inoise = inoise[:, :dim2, :dim3, :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
-        noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)  
+
+        if type(x_g) is not int:
+            noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)
+        else:  
+            noise1_l = noise1
+
         x_l = self.activation(x_l + noise1_l)
         if type(x_g) is not int:
             x_g = self.activation(x_g + noise1_g)
@@ -644,7 +649,12 @@ class GeneratorBlock(nn.Module):
         print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
         
-        noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1) 
+
+        if type(x_g) is not int:
+            noise2_l, noise2_g = torch.split(noise2, x_l.size(1), dim=1) 
+        else:
+            noise2_l = noise2
+
         x_l = self.activation(x_l + noise2_l)
         if type(x_g) is not int:
             x_g = self.activation(x_g + noise2_g)
