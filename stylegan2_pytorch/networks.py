@@ -701,8 +701,8 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([])
         self.attns = nn.ModuleList([])
 
-        n_last_layers = len(list(in_out_pairs)) - 2
-        print(n_last_layers)
+        #n_last_layers = len(list(in_out_pairs)) - 2
+       # print(n_last_layers)
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
             not_first = ind != 0
             not_last = ind != (self.num_layers - 1)
@@ -719,8 +719,8 @@ class Generator(nn.Module):
                 upsample = not_first,
                 upsample_rgb = not_last,
                 rgba = transparent,
-                g_in = 0.25 if ind > n_last_layers else 0.0,
-                g_out = 0.25 if ind > n_last_layers - 1 else 0.0
+                g_in = 0.0,#0.25 if ind > n_last_layers else 0.0,
+                g_out = 0.0 # 0.25 if ind > n_last_layers - 1 else 0.0
             )
             self.blocks.append(block)
 
@@ -740,7 +740,6 @@ class Generator(nn.Module):
         for style, block, attn in zip(styles, self.blocks, self.attns):
             if exists(attn):
                 x = attn(x)
-            print("Forward Generator Block")
             x, rgb = block(x, rgb, style, input_noise)
 
         return rgb
