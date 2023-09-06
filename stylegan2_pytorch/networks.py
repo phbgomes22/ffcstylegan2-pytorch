@@ -626,7 +626,9 @@ class GeneratorBlock(nn.Module):
         print(x_l.shape)
         print("1" if type(x_g) == int else x_g.shape)
 
-        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        dim2 = x_l.shape[2] if type(x_g) is int else x_l.shape[2] + x_g.shape[2]
+        dim3 = x_l.shape[3] if type(x_g) is int else x_l.shape[3] + x_g.shape[3]
+        inoise = inoise[:, :dim2, :dim3, :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
         noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)  
