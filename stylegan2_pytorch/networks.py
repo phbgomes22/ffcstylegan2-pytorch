@@ -701,8 +701,8 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([])
         self.attns = nn.ModuleList([])
 
-        #n_last_layers = len(list(in_out_pairs)) - 2
-       # print(n_last_layers)
+        n_last_layers = len(list(in_out_pairs)) - 2
+        print(n_last_layers)
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
             not_first = ind != 0
             not_last = ind != (self.num_layers - 1)
