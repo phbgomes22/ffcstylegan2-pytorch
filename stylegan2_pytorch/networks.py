@@ -452,6 +452,90 @@ class RGBBlock(nn.Module):
 
         return x
 
+class FFC2DMod(nn.Module):
+    def __init__(self, in_chan, out_chan, kernel, ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8, **kwargs):
+        super().__init__()
+        self.filters = out_chan
+        self.demod = demod
+        self.kernel = kernel
+        self.stride = stride
+        self.dilation = dilation
+
+        in_cg = int(in_chan * ratio_gin)
+        in_cl = in_chan - in_cg
+        out_cg = int(out_chan * ratio_gout)
+        out_cl = out_chan - out_cg
+        self.out_cg = out_cg
+        self.out_cl = out_cl
+
+        self.has_l2l = in_cl != 0 and out_cl != 0
+        self.weightl2l = nn.Identity if not self.has_l2l else nn.Parameter(torch.randn((out_cl, in_cl, kernel, kernel)))
+        
+        self.has_g2l = in_cg != 0 and out_cl != 0
+        self.weightg2l = nn.Identity if not self.has_g2l else nn.Parameter(torch.randn((out_cl, in_cg, kernel, kernel)))
+
+        self.has_l2g = in_cl != 0 and out_cg != 0
+        self.weightl2g = nn.Identity if not self.has_l2g else nn.Parameter(torch.randn((out_cg, in_cl, kernel, kernel)))
+        
+        self.has_g2g = in_cg != 0 and out_cg != 0
+        self.spectral_transform = nn.Identity if not self.has_g2g else SpectralTransform(in_channels=in_cg, out_channels=out_cg, stride=stride, enable_lfu=False, upsample=False)
+        
+        self.eps = eps
+        nn.init.kaiming_normal_(self.weightl2l, a=0, mode='fan_in', nonlinearity='leaky_relu')
+        nn.init.kaiming_normal_(self.weightg2l, a=0, mode='fan_in', nonlinearity='leaky_relu')
+        nn.init.kaiming_normal_(self.weightl2g, a=0, mode='fan_in', nonlinearity='leaky_relu')
+
+    def _get_same_padding(self, size, kernel, dilation, stride):
+        return ((size - 1) * (stride - 1) + dilation * (kernel - 1)) // 2
+
+    def _create_weights(self, in_weights, out_ch, y, b, h, w):
+        w1 = y[:, None, :, None, None]
+        w2 = in_weights[None, :, :, :, :]
+        weights = w2 * (w1 + 1)
+
+        if self.demod:
+            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdim=True) + self.eps)
+            weights = weights * d
+
+        x = x.reshape(1, -1, h, w)
+
+        _, _, *ws = weights.shape
+        weights = weights.reshape(b * out_ch, *ws)
+        return weights
+
+    def forward(self, x, y):
+        # splits the received signal into the local and global signals
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        b, _, h, w = x_l.shape
+        if type(x_g) is not int:
+            b_g, _, h_g, w_g = x_g.shape
+            b += b_g
+            h += h_g
+            w += w_g
+
+        padding = self._get_same_padding(h, self.kernel, self.dilation, self.stride)
+
+        if self.has_l2l: 
+            weights_l2l = self._create_weights(self.weightl2l, self.out_cl, y, b, h, w)
+            out_xl = F.conv2d(x_l, weights_l2l, padding=padding, groups=b)
+            out_xl = out_xl.reshape(-1, self.out_cl, h, w)
+            if self.has_g2l:
+                weights_g2l = self._create_weights(self.weightg2l, self.out_cl, y, b, h, w)
+                out_xl += F.conv2d(x_g, weights_g2l, padding=padding, groups=b)
+                out_xl = out_xl.reshape(-1, self.out_cl, h, w)
+
+        if self.has_l2g:
+            weights_l2g = self._create_weights(self.weightl2g, self.out_cg, y, b, h, w)
+            out_xg = F.conv2d(x_l, weights_l2g, padding=padding, groups=b)
+            out_xg = out_xg.reshape(-1, self.out_cg, h, w)
+            if self.has_g2g:
+                out_xg += self.spectral_transform(out_xg)
+
+        return x
+
+
 class Conv2DMod(nn.Module):
     def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, eps = 1e-8, **kwargs):
         super().__init__()
@@ -503,7 +587,7 @@ class FFCMOD(nn.Module):
     '''
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int,
                  ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8,
-                 enable_lfu: bool = True):
+                 enable_lfu: bool = False):
 
         super(FFCMOD, self).__init__()
 
