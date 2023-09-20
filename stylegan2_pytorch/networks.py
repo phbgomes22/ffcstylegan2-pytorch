@@ -692,16 +692,16 @@ class FFCGeneratorBlock(nn.Module):
             x_l = self.upsample(x_l)
             if type(x_g) is not int:
                 x_g = self.upsample(x_g)
-        # print("\n")
-        # print("\n====== GEN BLOCK ========")
-        # print(x_l.shape)
-        # print("1" if type(x_g) == int else x_g.shape)
-        # print("\n------ CONV 1 -------")
+        print("\n")
+        print("\n====== GEN BLOCK ========")
+        print(x_l.shape)
+        print("1" if type(x_g) == int else x_g.shape)
+        print("\n------ CONV 1 -------")
         x = x_l, x_g
         style1 = self.to_style1(istyle)
         x_l, x_g = self.conv1(x, style1)
-        # print(x_l.shape)
-        # print("1" if type(x_g) == int else x_g.shape)
+        print(x_l.shape)
+        print("1" if type(x_g) == int else x_g.shape)
 
         dim2 = x_l.shape[2] if type(x_g) is int else x_l.shape[2] + x_g.shape[2]
         dim3 = x_l.shape[3] if type(x_g) is int else x_l.shape[3] + x_g.shape[3]
@@ -720,10 +720,10 @@ class FFCGeneratorBlock(nn.Module):
 
         x = x_l, x_g
         style2 = self.to_style2(istyle)
-        # print("------ CONV 2 -------")
-        # print(style2.shape)
-        # print(x_l.shape)
-        # print("1" if type(x_g) == int else x_g.shape)
+        print("------ CONV 2 -------")
+        print(style2.shape)
+        print(x_l.shape)
+        print("1" if type(x_g) == int else x_g.shape)
         x_l, x_g = self.conv2(x, style2)
         
 
