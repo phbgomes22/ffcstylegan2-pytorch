@@ -491,82 +491,6 @@ class Conv2DMod(nn.Module):
         return x
 
 
-class PGFFCMOD(nn.Module):
-    '''
-    The FFC Layer
-
-    It represents the module that receives the total signal, splits into local and global signals and returns the complete signal in the end.
-    This represents the layer of the Fast Fourier Convolution that comes in place of a vanilla convolution layer.
-
-    It contains:
-        Conv2ds with a kernel_size received as a parameter from the __init__ in `kernel_size`.
-        The Spectral Transform module for the processing of the global signal. 
-    '''
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int,
-                 ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8,
-                 enable_lfu: bool = False):
-
-        super(PGFFCMOD, self).__init__()
-
-        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
-        self.stride = stride
-
-        # calculate the number of input and output channels based on the ratio (alpha) 
-        # of the local and global signals 
-        in_cg = int(in_channels * ratio_gin)
-        in_cl = in_channels - in_cg
-        out_cg = int(out_channels * ratio_gout)
-        out_cl = out_channels - out_cg
-
-        self.in_cl = in_cl
-        self.ratio_gin = ratio_gin
-        self.ratio_gout = ratio_gout
-
-        # defines the module as a Conv2d unless the channels input or output are zero
-        condition = in_cl == 0 or out_cl == 0
-        module = nn.Identity if condition else Conv2DMod
-        # this is the convolution that processes the local signal and contributes 
-        # for the formation of the outputted local signal
-        self.convl2l = module(in_cl, out_cl, kernel_size, demod, stride, dilation, eps)
-        # if not condition:
-        #     self.convl2l = torch.nn.utils.spectral_norm(self.convl2l)
-
-        # defines the module as the Spectral Transform unless the channels output are zero
-        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
-
-        # (Fourier)
-        # this is the convolution that processes the global signal and contributes (in the spectral domain)
-        # for the formation of the outputted global signal 
-        self.convg2g = module(
-            in_cg, out_cg, stride, 1, enable_lfu, False)
-        
-
-    # receives the signal as a tuple containing the local signal in the first position
-    # and the global signal in the second position
-    def forward(self, x, style = None):
-        # splits the received signal into the local and global signals
-       
-        x_l, x_g = (x, 0) if self.ratio_gin == 0 else torch.split(x, self.in_cl, dim=1)
-        out_xl, out_xg = 0, 0
-
-        if self.ratio_gin != 0:
-            style, _ = torch.split(style, x_l.size(1), dim=1)
-
-        if self.ratio_gout != 1:
-            # creates the output local signal passing the right signals to the right convolutions
-            out_xl = self.convl2l(x_l, style)
-                
-        if type(self.convg2g) is not nn.Identity:
-            out_xg = self.convg2g(x_g)
-
-        # returns both signals as a tuple
-        if type(out_xg) is not int:
-            return torch.cat((out_xl, out_xg), dim=1)
-        
-        return out_xl
-
-
-
 class FFCMOD(nn.Module):
     '''
     The FFC Layer
@@ -709,6 +633,9 @@ class FFCGeneratorBlock(nn.Module):
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
 
+        print(noise1.shape)
+        print(noise2.shape)
+        
         if type(x_g) is not int:
             noise1_l, noise1_g = torch.split(noise1, x_l.size(1), dim=1)
         else:  
