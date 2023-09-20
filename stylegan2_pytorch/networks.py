@@ -506,7 +506,7 @@ class PGFFCMOD(nn.Module):
                  ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8,
                  enable_lfu: bool = False):
 
-        super(FFCMOD, self).__init__()
+        super(PGFFCMOD, self).__init__()
 
         assert stride == 1 or stride == 2, "Stride should be 1 or 2."
         self.stride = stride
