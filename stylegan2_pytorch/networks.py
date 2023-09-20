@@ -856,7 +856,7 @@ class Generator(nn.Module):
 
             self.attns.append(attn_fn)
 
-            block = GeneratorBlock(
+            block = FFCGeneratorBlock(
                 latent_dim,
                 in_chan,
                 out_chan,
@@ -864,7 +864,7 @@ class Generator(nn.Module):
                 upsample_rgb = not_last,
                 rgba = transparent,
                 g_in = 0.25 if ind > n_last_layers else 0.0,
-                g_out = 0.25 if ind > n_last_layers else 0.0
+                g_out = 0.25 if ind > n_last_layers - 1 else 0.0
             )
             self.blocks.append(block)
 
