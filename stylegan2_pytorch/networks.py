@@ -844,7 +844,7 @@ class Generator(nn.Module):
         self.attns = nn.ModuleList([])
 
 
-        n_last_layers = len(filters[1:]) - 3
+        n_last_layers = len(filters[1:]) - 2
         print(n_last_layers)
 
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
