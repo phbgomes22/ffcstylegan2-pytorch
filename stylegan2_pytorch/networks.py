@@ -544,20 +544,17 @@ class PGFFCMOD(nn.Module):
     # and the global signal in the second position
     def forward(self, x, style = None):
         # splits the received signal into the local and global signals
-        x_l, x_g = torch.split(x, int(x.size(1)*self.ratio_gin), dim=1)
+        x_l, x_g = (x, 0) if self.ratio_gin == 0 else torch.split(x, int(x.size(1)*self.ratio_gin), dim=1)
         out_xl, out_xg = 0, 0
 
-        style_l, style_g = torch.split(style, x_l.size(1), dim=1)
+        style_l, _ = torch.split(style, x_l.size(1), dim=1)
 
         if self.ratio_gout != 1:
             # creates the output local signal passing the right signals to the right convolutions
-            out_xl = self.convl2l(x_l, style_l) 
-            if type(self.convg2l) is not nn.Identity:
-                out_xl =+ self.convg2l(x_g, style_g)
+            out_xl = self.convl2l(x_l, style_l)
                 
-        if self.ratio_gout != 0:
-            if type(self.convg2g) is not nn.Identity:
-                out_xg = self.convg2g(x_g)
+        if type(self.convg2g) is not nn.Identity:
+            out_xg = self.convg2g(x_g)
 
         # returns both signals as a tuple
         if type(out_xg) is not int:
