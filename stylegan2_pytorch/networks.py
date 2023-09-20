@@ -518,6 +518,7 @@ class PGFFCMOD(nn.Module):
         out_cg = int(out_channels * ratio_gout)
         out_cl = out_channels - out_cg
 
+        self.in_cl = in_cl
         self.ratio_gin = ratio_gin
         self.ratio_gout = ratio_gout
 
@@ -544,9 +545,8 @@ class PGFFCMOD(nn.Module):
     # and the global signal in the second position
     def forward(self, x, style = None):
         # splits the received signal into the local and global signals
-        print(int(x.size(1)*self.ratio_gin))
-        print(self.ratio_gin)
-        x_l, x_g = (x, 0) if self.ratio_gin == 0 else torch.split(x, int(x.size(1)*self.ratio_gin), dim=1)
+       
+        x_l, x_g = (x, 0) if self.ratio_gin == 0 else torch.split(x, self.in_cl, dim=1)
         out_xl, out_xg = 0, 0
 
         if self.ratio_gin != 0:
