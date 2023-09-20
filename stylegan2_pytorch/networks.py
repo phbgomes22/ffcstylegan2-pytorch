@@ -452,89 +452,6 @@ class RGBBlock(nn.Module):
 
         return x
 
-class FFC2DMod(nn.Module):
-    def __init__(self, in_chan, out_chan, kernel, ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8, **kwargs):
-        super().__init__()
-        self.filters = out_chan
-        self.demod = demod
-        self.kernel = kernel
-        self.stride = stride
-        self.dilation = dilation
-
-        in_cg = int(in_chan * ratio_gin)
-        in_cl = in_chan - in_cg
-        out_cg = int(out_chan * ratio_gout)
-        out_cl = out_chan - out_cg
-        self.out_cg = out_cg
-        self.out_cl = out_cl
-
-        self.has_l2l = in_cl != 0 and out_cl != 0
-        self.weightl2l = nn.Identity if not self.has_l2l else nn.Parameter(torch.randn((out_cl, in_cl, kernel, kernel)))
-        
-        self.has_g2l = in_cg != 0 and out_cl != 0
-        self.weightg2l = nn.Identity if not self.has_g2l else nn.Parameter(torch.randn((out_cl, in_cg, kernel, kernel)))
-
-        self.has_l2g = in_cl != 0 and out_cg != 0
-        self.weightl2g = nn.Identity if not self.has_l2g else nn.Parameter(torch.randn((out_cg, in_cl, kernel, kernel)))
-        
-        self.has_g2g = in_cg != 0 and out_cg != 0
-        self.spectral_transform = nn.Identity if not self.has_g2g else SpectralTransform(in_channels=in_cg, out_channels=out_cg, stride=stride, enable_lfu=False, upsample=False)
-        
-        self.eps = eps
-        nn.init.kaiming_normal_(self.weightl2l, a=0, mode='fan_in', nonlinearity='leaky_relu')
-        nn.init.kaiming_normal_(self.weightg2l, a=0, mode='fan_in', nonlinearity='leaky_relu')
-        nn.init.kaiming_normal_(self.weightl2g, a=0, mode='fan_in', nonlinearity='leaky_relu')
-
-    def _get_same_padding(self, size, kernel, dilation, stride):
-        return ((size - 1) * (stride - 1) + dilation * (kernel - 1)) // 2
-
-    def _create_weights(self, in_weights, out_ch, y, b, h, w):
-        w1 = y[:, None, :, None, None]
-        w2 = in_weights[None, :, :, :, :]
-        weights = w2 * (w1 + 1)
-
-        if self.demod:
-            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdim=True) + self.eps)
-            weights = weights * d
-
-        x = x.reshape(1, -1, h, w)
-
-        _, _, *ws = weights.shape
-        weights = weights.reshape(b * out_ch, *ws)
-        return weights
-
-    def forward(self, x, y):
-        # splits the received signal into the local and global signals
-        x_l, x_g = x if type(x) is tuple else (x, 0)
-        out_xl, out_xg = 0, 0
-
-        b, _, h, w = x_l.shape
-        if type(x_g) is not int:
-            b_g, _, h_g, w_g = x_g.shape
-            b += b_g
-            h += h_g
-            w += w_g
-
-        padding = self._get_same_padding(h, self.kernel, self.dilation, self.stride)
-
-        if self.has_l2l: 
-            weights_l2l = self._create_weights(self.weightl2l, self.out_cl, y, b, h, w)
-            out_xl = F.conv2d(x_l, weights_l2l, padding=padding, groups=b)
-            out_xl = out_xl.reshape(-1, self.out_cl, h, w)
-            if self.has_g2l:
-                weights_g2l = self._create_weights(self.weightg2l, self.out_cl, y, b, h, w)
-                out_xl += F.conv2d(x_g, weights_g2l, padding=padding, groups=b)
-                out_xl = out_xl.reshape(-1, self.out_cl, h, w)
-
-        if self.has_l2g:
-            weights_l2g = self._create_weights(self.weightl2g, self.out_cg, y, b, h, w)
-            out_xg = F.conv2d(x_l, weights_l2g, padding=padding, groups=b)
-            out_xg = out_xg.reshape(-1, self.out_cg, h, w)
-            if self.has_g2g:
-                out_xg += self.spectral_transform(out_xg)
-
-        return x
-
 
 class Conv2DMod(nn.Module):
     def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, eps = 1e-8, **kwargs):
@@ -572,6 +489,82 @@ class Conv2DMod(nn.Module):
 
         x = x.reshape(-1, self.filters, h, w)
         return x
+
+
+class PGFFCMOD(nn.Module):
+    '''
+    The FFC Layer
+
+    It represents the module that receives the total signal, splits into local and global signals and returns the complete signal in the end.
+    This represents the layer of the Fast Fourier Convolution that comes in place of a vanilla convolution layer.
+
+    It contains:
+        Conv2ds with a kernel_size received as a parameter from the __init__ in `kernel_size`.
+        The Spectral Transform module for the processing of the global signal. 
+    '''
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int,
+                 ratio_gin: float, ratio_gout: float, demod=True, stride=1, dilation=1, eps = 1e-8,
+                 enable_lfu: bool = False):
+
+        super(FFCMOD, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        # calculate the number of input and output channels based on the ratio (alpha) 
+        # of the local and global signals 
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+
+        # defines the module as a Conv2d unless the channels input or output are zero
+        condition = in_cl == 0 or out_cl == 0
+        module = nn.Identity if condition else Conv2DMod
+        # this is the convolution that processes the local signal and contributes 
+        # for the formation of the outputted local signal
+        self.convl2l = module(in_cl, out_cl, kernel_size, demod, stride, dilation, eps)
+        # if not condition:
+        #     self.convl2l = torch.nn.utils.spectral_norm(self.convl2l)
+
+        # defines the module as the Spectral Transform unless the channels output are zero
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+
+        # (Fourier)
+        # this is the convolution that processes the global signal and contributes (in the spectral domain)
+        # for the formation of the outputted global signal 
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1, enable_lfu, False)
+        
+
+    # receives the signal as a tuple containing the local signal in the first position
+    # and the global signal in the second position
+    def forward(self, x, style = None):
+        # splits the received signal into the local and global signals
+        x_l, x_g = torch.split(x, int(x.size(1)*self.ratio_gin), dim=1)
+        out_xl, out_xg = 0, 0
+
+        style_l, style_g = torch.split(style, x_l.size(1), dim=1)
+
+        if self.ratio_gout != 1:
+            # creates the output local signal passing the right signals to the right convolutions
+            out_xl = self.convl2l(x_l, style_l) 
+            if type(self.convg2l) is not nn.Identity:
+                out_xl =+ self.convg2l(x_g, style_g)
+                
+        if self.ratio_gout != 0:
+            if type(self.convg2g) is not nn.Identity:
+                out_xg = self.convg2g(x_g)
+
+        # returns both signals as a tuple
+        if type(out_xg) is not int:
+            return torch.cat((out_xl, out_xg), dim=1)
+        
+        return out_xl
+
 
 
 class FFCMOD(nn.Module):
@@ -669,7 +662,7 @@ class FFCMOD(nn.Module):
 
 
 
-class GeneratorBlock(nn.Module):
+class FFCGeneratorBlock(nn.Module):
     def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False,
                  g_in = 0.0, g_out = 0.0):
         super().__init__()
@@ -748,6 +741,57 @@ class GeneratorBlock(nn.Module):
         rgb = self.to_rgb(x_rgb, prev_rgb, istyle)
         return x, rgb
 
+
+
+class GeneratorBlock(nn.Module):
+    def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False,
+                 g_in = 0.0, g_out = 0.0):
+        super().__init__()
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
+
+
+        self.to_style1 = nn.Linear(latent_dim, input_channels)
+        self.to_noise1 = nn.Linear(1, filters) # output from conv1
+        self.to_noise2 = nn.Linear(1, filters) # output from conv2
+        self.g_in = g_in
+        self.conv1 = PGFFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=g_in)
+        
+        self.to_style2 = nn.Linear(latent_dim, filters)
+
+        self.conv2 =  PGFFCMOD(filters, filters, 3, ratio_gin=g_in, ratio_gout=g_out)
+
+        self.activation = leaky_relu()
+        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
+
+        self.resizer = Resizer()
+
+    def forward(self, x, prev_rgb, istyle, inoise):
+
+        if exists(self.upsample):
+            x = self.upsample(x)
+            
+        style1 = self.to_style1(istyle)
+        x = self.conv1(x, style1)
+
+        dim2 = x.shape[2]
+        dim3 = x.shape[3]
+        inoise = inoise[:, :dim2, :dim3, :]
+        noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
+        noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
+
+
+        x = self.activation(x + noise1)
+        
+        style2 = self.to_style2(istyle)
+        x = self.conv2(x, style2)
+        
+        x = self.activation(x + noise2)
+
+        rgb = self.to_rgb(x, prev_rgb, istyle)
+        return x, rgb
+
+
+
 class DiscriminatorBlock(nn.Module):
     def __init__(self, input_channels, filters, downsample=True):
         super().__init__()
@@ -800,7 +844,7 @@ class Generator(nn.Module):
         self.attns = nn.ModuleList([])
 
 
-        n_last_layers = len(filters[1:]) - 2
+        n_last_layers = len(filters[1:]) - 3
         print(n_last_layers)
 
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
@@ -820,7 +864,7 @@ class Generator(nn.Module):
                 upsample_rgb = not_last,
                 rgba = transparent,
                 g_in = 0.25 if ind > n_last_layers else 0.0,
-                g_out = 0.25 if ind > n_last_layers - 1 else 0.0
+                g_out = 0.25 if ind > n_last_layers else 0.0
             )
             self.blocks.append(block)
 
