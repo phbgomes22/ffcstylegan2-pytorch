@@ -547,11 +547,12 @@ class PGFFCMOD(nn.Module):
         x_l, x_g = (x, 0) if self.ratio_gin == 0 else torch.split(x, int(x.size(1)*self.ratio_gin), dim=1)
         out_xl, out_xg = 0, 0
 
-        style_l, _ = torch.split(style, x_l.size(1), dim=1)
+        if self.ratio_gin != 0:
+            style, _ = torch.split(style, x_l.size(1), dim=1)
 
         if self.ratio_gout != 1:
             # creates the output local signal passing the right signals to the right convolutions
-            out_xl = self.convl2l(x_l, style_l)
+            out_xl = self.convl2l(x_l, style)
                 
         if type(self.convg2g) is not nn.Identity:
             out_xg = self.convg2g(x_g)
