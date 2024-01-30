@@ -671,51 +671,40 @@ class FFCGeneratorBlock(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False,
-                 g_in = 0.0, g_out = 0.0):
+    def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
-
         self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1 = nn.Linear(1, filters) # output from conv1
-        self.to_noise2 = nn.Linear(1, filters) # output from conv2
-        self.g_in = g_in
-        self.conv1 = PGFFCMOD(input_channels, filters, 3, ratio_gin=g_in, ratio_gout=g_in)
+        self.to_noise1 = nn.Linear(1, filters)
+        self.conv1 = Conv2DMod(input_channels, filters, 3)
         
         self.to_style2 = nn.Linear(latent_dim, filters)
-
-        self.conv2 =  PGFFCMOD(filters, filters, 3, ratio_gin=g_in, ratio_gout=g_out)
+        self.to_noise2 = nn.Linear(1, filters)
+        self.conv2 = Conv2DMod(filters, filters, 3)
 
         self.activation = leaky_relu()
         self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, rgba)
 
-        self.resizer = Resizer()
-
     def forward(self, x, prev_rgb, istyle, inoise):
-
         if exists(self.upsample):
             x = self.upsample(x)
-            
-        style1 = self.to_style1(istyle)
-        x = self.conv1(x, style1)
 
-        dim2 = x.shape[2]
-        dim3 = x.shape[3]
-        inoise = inoise[:, :dim2, :dim3, :]
+        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
 
-
+        style1 = self.to_style1(istyle)
+        x = self.conv1(x, style1)
         x = self.activation(x + noise1)
-        
+
         style2 = self.to_style2(istyle)
         x = self.conv2(x, style2)
-        
         x = self.activation(x + noise2)
 
         rgb = self.to_rgb(x, prev_rgb, istyle)
         return x, rgb
+
 
 
 
@@ -770,10 +759,6 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([])
         self.attns = nn.ModuleList([])
 
-
-        n_last_layers = len(filters[1:]) - 2
-        print(n_last_layers)
-
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
             not_first = ind != 0
             not_last = ind != (self.num_layers - 1)
@@ -783,17 +768,16 @@ class Generator(nn.Module):
 
             self.attns.append(attn_fn)
 
-            block = FFCGeneratorBlock(
+            block = GeneratorBlock(
                 latent_dim,
                 in_chan,
                 out_chan,
                 upsample = not_first,
                 upsample_rgb = not_last,
-                rgba = transparent,
-                g_in = 0.25 if n_last_layers else 0.0,
-                g_out = 0.25 if n_last_layers - 1 else 0.0
+                rgba = transparent
             )
             self.blocks.append(block)
+
 
     def forward(self, styles, input_noise):
         batch_size = styles.shape[0]
