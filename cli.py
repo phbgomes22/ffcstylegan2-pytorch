@@ -24,7 +24,7 @@ def timestamped_filename(prefix = 'generated-'):
 def set_seed(seed):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = True
     np.random.seed(seed)
     random.seed(seed)
 
@@ -74,7 +74,7 @@ def train_from_folder(
     models_dir = './models',
     name = 'default',
     new = False,
-    load_from = -1,
+    load_from = -1, 
     image_size = 128,
     network_capacity = 16,
     fmap_max = 512,
