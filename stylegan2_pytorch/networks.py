@@ -759,6 +759,8 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([])
         self.attns = nn.ModuleList([])
 
+        n_last_layers = len(filters[1:]) - 3
+
         for ind, (in_chan, out_chan) in enumerate(in_out_pairs):
             not_first = ind != 0
             not_last = ind != (self.num_layers - 1)
@@ -768,13 +770,15 @@ class Generator(nn.Module):
 
             self.attns.append(attn_fn)
 
-            block = GeneratorBlock(
+            block = FFCGeneratorBlock(
                 latent_dim,
                 in_chan,
                 out_chan,
                 upsample = not_first,
                 upsample_rgb = not_last,
-                rgba = transparent
+                rgba = transparent,
+                g_in = 0.25 if n_last_layers else 0.0,
+                g_out = 0.25 if n_last_layers - 1 else 0.0
             )
             self.blocks.append(block)
 
