@@ -770,15 +770,13 @@ class Generator(nn.Module):
 
             self.attns.append(attn_fn)
 
-            block = FFCGeneratorBlock(
+            block = GeneratorBlock(
                 latent_dim,
                 in_chan,
                 out_chan,
                 upsample = not_first,
                 upsample_rgb = not_last,
-                rgba = transparent,
-                g_in = 0.25 if not_first else 0.0,
-                g_out = 0.25
+                rgba = transparent
             )
             self.blocks.append(block)
 
