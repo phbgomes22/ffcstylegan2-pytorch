@@ -48,7 +48,7 @@ except:
 
 import aim
 
-assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
+#assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
 
 
 # constants
@@ -239,7 +239,7 @@ def loss_backwards(fp16, loss, optimizer, loss_id, **kwargs):
 def gradient_penalty(images, output, weight = 10):
     batch_size = images.shape[0]
     gradients = torch_grad(outputs=output, inputs=images,
-                           grad_outputs=torch.ones(output.size(), device=images.device),
+                           grad_outputs=torch.ones(output.size(), device="mps"),
                            create_graph=True, retain_graph=True, only_inputs=True)[0]
 
     gradients = gradients.reshape(batch_size, -1)
@@ -248,17 +248,17 @@ def gradient_penalty(images, output, weight = 10):
 def calc_pl_lengths(styles, images):
     device = images.device
     num_pixels = images.shape[2] * images.shape[3]
-    pl_noise = torch.randn(images.shape, device=device) / math.sqrt(num_pixels)
+    pl_noise = torch.randn(images.shape, device="mps") / math.sqrt(num_pixels)
     outputs = (images * pl_noise).sum()
 
     pl_grads = torch_grad(outputs=outputs, inputs=styles,
-                          grad_outputs=torch.ones(outputs.shape, device=device),
+                          grad_outputs=torch.ones(outputs.shape, device="mps"),
                           create_graph=True, retain_graph=True, only_inputs=True)[0]
 
     return (pl_grads ** 2).sum(dim=2).mean(dim=1).sqrt()
 
 def noise(n, latent_dim, device):
-    return torch.randn(n, latent_dim).cuda(device)
+    return torch.randn(n, latent_dim).to("mps")
 
 def noise_list(n, layers, latent_dim, device):
     return [(noise(n, latent_dim, device), layers)]
@@ -271,7 +271,7 @@ def latent_to_w(style_vectorizer, latent_descr):
     return [(style_vectorizer(z), num_layers) for z, num_layers in latent_descr]
 
 def image_noise(n, im_size, device):
-    return torch.FloatTensor(n, im_size, im_size, 1).uniform_(0., 1.).cuda(device)
+    return torch.FloatTensor(n, im_size, im_size, 1).uniform_(0., 1.).to("mps")
 
 def leaky_relu(p=0.2):
     return nn.LeakyReLU(p, inplace=True)
@@ -901,7 +901,8 @@ class StyleGAN2(nn.Module):
         self._init_weights()
         self.reset_parameter_averaging()
 
-        self.cuda(rank)
+        #self.cuda(rank)
+        
 
         # startup apex mixed precision
         self.fp16 = fp16
@@ -1081,10 +1082,10 @@ class Trainer():
         
     def init_GAN(self):
         args, kwargs = self.GAN_params
-        self.GAN = StyleGAN2(lr = self.lr, lr_mlp = self.lr_mlp, ttur_mult = self.ttur_mult, image_size = self.image_size, network_capacity = self.network_capacity, fmap_max = self.fmap_max, transparent = self.transparent, fq_layers = self.fq_layers, fq_dict_size = self.fq_dict_size, attn_layers = self.attn_layers, fp16 = self.fp16, cl_reg = self.cl_reg, no_const = self.no_const, rank = self.rank, *args, **kwargs)
+        self.GAN = StyleGAN2(lr = self.lr, lr_mlp = self.lr_mlp, ttur_mult = self.ttur_mult, image_size = self.image_size, network_capacity = self.network_capacity, fmap_max = self.fmap_max, transparent = self.transparent, fq_layers = self.fq_layers, fq_dict_size = self.fq_dict_size, attn_layers = self.attn_layers, fp16 = self.fp16, cl_reg = self.cl_reg, no_const = self.no_const, rank = "mps", *args, **kwargs)
 
         if self.is_ddp:
-            ddp_kwargs = {'device_ids': [self.rank]}
+            ddp_kwargs = {'device_ids': ["mps"]}
             self.S_ddp = DDP(self.GAN.S, **ddp_kwargs)
             self.G_ddp = DDP(self.GAN.G, **ddp_kwargs)
             self.D_ddp = DDP(self.GAN.D, **ddp_kwargs)
@@ -1118,9 +1119,8 @@ class Trainer():
                                                                   transparent = self.transparent, 
                                                                   aug_prob = self.dataset_aug_prob))
         
-        num_workers = default(self.num_workers, NUM_CORES if not self.is_ddp else 0)
-        sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
-        dataloader = data.DataLoader(self.dataset, num_workers = num_workers, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
+        sampler = DistributedSampler(self.dataset, rank="mps", num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
+        dataloader = data.DataLoader(self.dataset, num_workers = 0, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
         self.loader = cycle(dataloader)
 
         # auto set augmentation prob for user if dataset is detected to be low
@@ -1136,8 +1136,8 @@ class Trainer():
             self.init_GAN()
 
         self.GAN.train()
-        total_disc_loss = torch.tensor(0.).cuda(self.rank)
-        total_gen_loss = torch.tensor(0.).cuda(self.rank)
+        total_disc_loss = torch.tensor(0.).to("mps") #.cuda("mps")
+        total_gen_loss = torch.tensor(0.).to("mps") #.cuda("mps")
 
         batch_size = math.ceil(self.batch_size / self.world_size)
 
@@ -1153,37 +1153,37 @@ class Trainer():
         apply_path_penalty = not self.no_pl_reg and self.steps > 5000 and self.steps % 32 == 0
         apply_cl_reg_to_generated = self.steps > 20000
 
-        S = self.GAN.S if not self.is_ddp else self.S_ddp
-        G = self.GAN.G if not self.is_ddp else self.G_ddp
-        D = self.GAN.D if not self.is_ddp else self.D_ddp
-        D_aug = self.GAN.D_aug if not self.is_ddp else self.D_aug_ddp
+        S = self.GAN.S.to("mps") #if not self.is_ddp else self.S_ddp
+        G = self.GAN.G.to("mps") #if not self.is_ddp else self.G_ddp
+        D = self.GAN.D.to("mps") #if not self.is_ddp else self.D_ddp
+        D_aug = self.GAN.D_aug.to("mps") #if not self.is_ddp else self.D_aug_ddp
 
         backwards = partial(loss_backwards, self.fp16)
 
-        if exists(self.GAN.D_cl):
-            self.GAN.D_opt.zero_grad()
+        # if exists(self.GAN.D_cl):
+        #     self.GAN.D_opt.zero_grad()
 
-            if apply_cl_reg_to_generated:
-                for i in range(self.gradient_accumulate_every):
-                    get_latents_fn = mixed_list if random() < self.mixed_prob else noise_list
-                    style = get_latents_fn(batch_size, num_layers, latent_dim, device=self.rank)
-                    noise = image_noise(batch_size, image_size, device=self.rank)
+        #     if apply_cl_reg_to_generated:
+        #         for i in range(self.gradient_accumulate_every):
+        #             get_latents_fn = mixed_list if random() < self.mixed_prob else noise_list
+        #             style = get_latents_fn(batch_size, num_layers, latent_dim, device="mps")
+        #             noise = image_noise(batch_size, image_size, device="mps")
 
-                    w_space = latent_to_w(self.GAN.S, style)
-                    w_styles = styles_def_to_tensor(w_space)
+        #             w_space = latent_to_w(self.GAN.S, style)
+        #             w_styles = styles_def_to_tensor(w_space)
 
-                    generated_images = self.GAN.G(w_styles, noise)
-                    self.GAN.D_cl(generated_images.clone().detach(), accumulate=True)
+        #             generated_images = self.GAN.G(w_styles, noise)
+        #             self.GAN.D_cl(generated_images.clone().detach(), accumulate=True)
 
-            for i in range(self.gradient_accumulate_every):
-                image_batch = next(self.loader).cuda(self.rank)
-                self.GAN.D_cl(image_batch, accumulate=True)
+        #     for i in range(self.gradient_accumulate_every):
+        #         image_batch = next(self.loader).to("mps")#cuda("mps")
+        #         self.GAN.D_cl(image_batch, accumulate=True)
 
-            loss = self.GAN.D_cl.calculate_loss()
-            self.last_cr_loss = loss.clone().detach().item()
-            backwards(loss, self.GAN.D_opt, loss_id = 0)
+        #     loss = self.GAN.D_cl.calculate_loss()
+        #     self.last_cr_loss = loss.clone().detach().item()
+        #     backwards(loss, self.GAN.D_opt, loss_id = 0)
 
-            self.GAN.D_opt.step()
+        #     self.GAN.D_opt.step()
 
         # setup losses
 
@@ -1203,8 +1203,8 @@ class Trainer():
 
         for i in gradient_accumulate_contexts(self.gradient_accumulate_every, self.is_ddp, ddps=[D_aug, S, G]):
             get_latents_fn = mixed_list if random() < self.mixed_prob else noise_list
-            style = get_latents_fn(batch_size, num_layers, latent_dim, device=self.rank)
-            noise = image_noise(batch_size, image_size, device=self.rank)
+            style = get_latents_fn(batch_size, num_layers, latent_dim, device="mps")
+            noise = image_noise(batch_size, image_size, device="mps")
 
             w_space = latent_to_w(S, style)
             w_styles = styles_def_to_tensor(w_space)
@@ -1212,7 +1212,7 @@ class Trainer():
             generated_images = G(w_styles, noise)
             fake_output, fake_q_loss = D_aug(generated_images.clone().detach(), detach = True, **aug_kwargs)
 
-            image_batch = next(self.loader).cuda(self.rank)
+            image_batch = next(self.loader).to("mps")#.cuda("mps")
             image_batch.requires_grad_()
             real_output, real_q_loss = D_aug(image_batch, **aug_kwargs)
 
@@ -1254,8 +1254,8 @@ class Trainer():
         self.GAN.G_opt.zero_grad()
 
         for i in gradient_accumulate_contexts(self.gradient_accumulate_every, self.is_ddp, ddps=[S, G, D_aug]):
-            style = get_latents_fn(batch_size, num_layers, latent_dim, device=self.rank)
-            noise = image_noise(batch_size, image_size, device=self.rank)
+            style = get_latents_fn(batch_size, num_layers, latent_dim, device="mps")
+            noise = image_noise(batch_size, image_size, device="mps")
 
             w_space = latent_to_w(S, style)
             w_styles = styles_def_to_tensor(w_space)
@@ -1266,7 +1266,7 @@ class Trainer():
 
             real_output = None
             if G_requires_reals:
-                image_batch = next(self.loader).cuda(self.rank)
+                image_batch = next(self.loader).to("mps")#.cuda("mps")
                 real_output, _ = D_aug(image_batch, detach = True, **aug_kwargs)
                 real_output = real_output.detach()
 
@@ -1340,6 +1340,8 @@ class Trainer():
         self.steps += 1
         self.av = None
 
+        torch.mps.empty_cache()
+
     @torch.no_grad()
     def evaluate(self, num = 0, trunc = 1.0):
         self.GAN.eval()
@@ -1352,17 +1354,17 @@ class Trainer():
 
         # latents and noise
 
-        latents = noise_list(num_rows ** 2, num_layers, latent_dim, device=self.rank)
-        n = image_noise(num_rows ** 2, image_size, device=self.rank)
+        latents = noise_list(num_rows ** 2, num_layers, latent_dim, device="mps")
+        n = image_noise(num_rows ** 2, image_size, device="mps")
 
         # regular
 
-        generated_images = self.generate_truncated(self.GAN.S, self.GAN.G, latents, n, trunc_psi = self.trunc_psi)
+        generated_images = self.generate_truncated(self.GAN.S.to("mps"), self.GAN.G.to("mps"), latents, n, trunc_psi = self.trunc_psi)
         torchvision.utils.save_image(generated_images, str(self.results_dir / self.name / f'{str(num)}.{ext}'), nrow=num_rows)
         
         # moving averages
 
-        generated_images = self.generate_truncated(self.GAN.SE, self.GAN.GE, latents, n, trunc_psi = self.trunc_psi)
+        generated_images = self.generate_truncated(self.GAN.SE.to("mps"), self.GAN.GE.to("mps"), latents, n, trunc_psi = self.trunc_psi)
         torchvision.utils.save_image(generated_images, str(self.results_dir / self.name / f'{str(num)}-ema.{ext}'), nrow=num_rows)
 
         # mixing regularities
@@ -1372,10 +1374,10 @@ class Trainer():
             repeat_idx = [1] * a.dim()
             repeat_idx[dim] = n_tile
             a = a.repeat(*(repeat_idx))
-            order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])).cuda(self.rank)
+            order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])).to("mps")
             return torch.index_select(a, dim, order_index)
 
-        nn = noise(num_rows, latent_dim, device=self.rank)
+        nn = noise(num_rows, latent_dim, device="mps")
         tmp1 = tile(nn, 0, num_rows)
         tmp2 = nn.repeat(num_rows, 1)
 
@@ -1388,7 +1390,7 @@ class Trainer():
     @torch.no_grad()
     def calculate_fid(self, num_batches):
         from pytorch_fid import fid_score
-        torch.cuda.empty_cache()
+       # torch.cuda.empty_cache()
 
         real_path = self.fid_dir / 'real'
         fake_path = self.fid_dir / 'fake'
@@ -1419,8 +1421,8 @@ class Trainer():
 
         for batch_num in tqdm(range(num_batches), desc='calculating FID - saving generated'):
             # latents and noise
-            latents = noise_list(self.batch_size, num_layers, latent_dim, device=self.rank)
-            noise = image_noise(self.batch_size, image_size, device=self.rank)
+            latents = noise_list(self.batch_size, num_layers, latent_dim, device="mps")
+            noise = image_noise(self.batch_size, image_size, device="mps")
 
             # moving averages
             generated_images = self.generate_truncated(self.GAN.SE, self.GAN.GE, latents, noise, trunc_psi = self.trunc_psi)
@@ -1437,12 +1439,12 @@ class Trainer():
         latent_dim = self.GAN.G.latent_dim
 
         if not exists(self.av):
-            z = noise(2000, latent_dim, device=self.rank)
+            z = noise(2000, latent_dim, device="mps")
             samples = evaluate_in_chunks(batch_size, S, z).cpu().numpy()
             self.av = np.mean(samples, axis = 0)
             self.av = np.expand_dims(self.av, axis = 0)
 
-        av_torch = torch.from_numpy(self.av).cuda(self.rank)
+        av_torch = torch.from_numpy(self.av).to("mps")#.cuda("mps")
         tensor = trunc_psi * (tensor - av_torch) + av_torch
         return tensor
 
@@ -1474,9 +1476,9 @@ class Trainer():
 
         # latents and noise
 
-        latents_low = noise(num_rows ** 2, latent_dim, device=self.rank)
-        latents_high = noise(num_rows ** 2, latent_dim, device=self.rank)
-        n = image_noise(num_rows ** 2, image_size, device=self.rank)
+        latents_low = noise(num_rows ** 2, latent_dim)
+        latents_high = noise(num_rows ** 2, latent_dim)
+        n = image_noise(num_rows ** 2, image_size)
 
         ratios = torch.linspace(0., 8., num_steps)
 
@@ -1518,9 +1520,10 @@ class Trainer():
         print(log)
 
     def track(self, value, name):
-        if not exists(self.logger):
-            return
-        self.logger.track(value, name = name)
+        return
+        # if not exists(self.logger):
+        #     return
+        # self.logger.track(value, name = name)
 
     def model_name(self, num):
         return str(self.models_dir / self.name / f'model_{num}.pt')
@@ -1562,7 +1565,7 @@ class Trainer():
 
         self.steps = name * self.save_every
 
-        load_data = torch.load(self.model_name(name))
+        load_data = torch.load(self.model_name(name), map_location="mps")
 
         if 'version' in load_data:
             print(f"loading from version {load_data['version']}")
@@ -1581,7 +1584,7 @@ class ModelLoader:
         self.model.load(load_from)
 
     def noise_to_styles(self, noise, trunc_psi = None):
-        noise = noise.cuda()
+        noise = noise.to("mps")#.cuda()
         w = self.model.GAN.SE(noise)
         if exists(trunc_psi):
             w = self.model.truncate_style(w)
